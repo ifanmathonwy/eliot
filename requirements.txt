@@ -1,0 +1,3 @@
+nltk==3.3
+pronouncing==0.1.5
+six==1.11.0

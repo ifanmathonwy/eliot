@@ -1,20 +1,4 @@
-"""
-Algorithms:
-
-1. Naive
-Generate a sentence from a language model word by word,
-pruning the list of candidate next words to those which would continue to
-allow the current sentence to form a valid iambic pentameter line.
-
-Use regular expression to recognize either valid partial pentameter or
-valid full pentameter based on the stress indices.
-
-TODO: refactor so that the algorithm is decoupled from the method of generating
-candidates.
-
-TODO: dactylic verse
-
-TODO: neural network language models.
+"""Generates a random Shakespearian sonnet.
 """
 
 import pronouncing
