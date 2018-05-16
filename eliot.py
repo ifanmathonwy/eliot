@@ -1,10 +1,20 @@
 """Generates a random Shakespearian sonnet.
+
+TODO: Add line generation method that works backwards from rhyming word.
+TODO: After doing the above, implement a more efficient sonnet generation algorithm.
+TODO: Handle Petrarchan sonnets.
+TODO: Handle some kind of neural language model.
+TODO: Cluster lines by meaning as well as rhyme.
+TODO: Limericks.
+TODO: Predict the candidates based on the whole current word sequence.
+TODO: Don't choose randomly from candidate set. Shuffled sample based on the distribution.
 """
 
-import pronouncing
 import nltk
+import pronouncing
 import random
 import re
+
 from collections import defaultdict
 
 PARTIAL_IAMBIC_RE = re.compile(r"^0$|^(0[12]){1,5}0?$|^(0[12]){1,4}0$")
@@ -154,7 +164,6 @@ def generate_sonnet(candidate_provider, candidate_pool_size=500):
         sentences.add(" ".join(sentence))
 
     clusters = defaultdict(list)
-
     while len(list(filter(lambda c: len(c) > 2, clusters.values()))) < 7:
         try:
             sentence = sentences.pop()
@@ -170,7 +179,7 @@ def generate_sonnet(candidate_provider, candidate_pool_size=500):
     couplets = list(filter(lambda c: len(c) > 2, clusters.values()))
     random.shuffle(couplets)
     couplets = [random.sample(couplet, 2) for couplet in couplets]
-
+    
     poem = []
     for a, b in zip((0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 6),
                     (0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1)):
@@ -179,7 +188,7 @@ def generate_sonnet(candidate_provider, candidate_pool_size=500):
 
 def main():
     provider = BigramWordCandidateProvider(
-        nltk.corpus.gutenberg.words('blake-poems.txt'))
+        nltk.corpus.gutenberg.words('melville-moby_dick.txt'))
     print(generate_sonnet(provider))
 
 
