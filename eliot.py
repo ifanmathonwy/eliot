@@ -17,7 +17,6 @@ TODO: Predict the candidates based on the whole current word sequence.
 TODO: Don't choose randomly from candidate set. Shuffled sample based on the distribution.
 """
 
-import itertools
 import random
 import re
 import time
@@ -29,6 +28,7 @@ from nltk.corpus import gutenberg
 
 PARTIAL_IAMBIC_RE = re.compile(r"^0$|^(0[12]){1,5}0?$|^(0[12]){1,4}0$")
 FULL_IAMBIC_RE = re.compile(r"^(0[12]){5}0?$")
+
 
 def stresses_for_word_sequence(word_sequence):
     """Gets the CMUDict stress sequence for a given word sequence.
@@ -49,6 +49,7 @@ def stresses_for_word_sequence(word_sequence):
         else:
             return ""
     return "".join(stress_sequence)
+
 
 def is_partial_iambic(word_sequence):
     """Identifies a valid part of a line of iambic pentameter.
@@ -72,6 +73,7 @@ def is_partial_iambic(word_sequence):
     else:
 
         return False
+
 
 def is_full_iambic(word_sequence):
     """Identifies a full line of iambic pentameter.
@@ -103,9 +105,10 @@ class BigramWordCandidateProvider(object):
         _bigrams = bigrams(corpus)
         self._cfd = ConditionalFreqDist(_bigrams)
 
-    def candidates(self, word):
-        """Returns a list of candidate next words given a word.
+    def candidates(self, word_sequence):
+        """Returns a list of candidate next words given a word sequence.
         """
+        word = word_sequence[-1]
         candidates = [
             candidate for (candidate, _) in self._cfd[word].most_common()]
         return candidates
@@ -113,9 +116,11 @@ class BigramWordCandidateProvider(object):
     def random_word(self):
         return random.choice(list(self._cfd.items()))[0]
 
+
 class GenerationTimeout(Exception):
     """Raised when generating a line of poetry takes too long."""
     pass
+
 
 def generate_iambic_sentence(candidate_provider,
                              start_word=None,
@@ -123,7 +128,7 @@ def generate_iambic_sentence(candidate_provider,
     """Generates a random iambic sentence.
 
     Args:
-        candidate_provider: An object which implements candidates(word) and
+        candidate_provider: An object which implements candidates(sequence) and
             random_word() methods.
         start_word (string): The first word of the sentence. Not guaranteed to
             be used if no iambic sentence can be generated from it.
@@ -145,7 +150,7 @@ def generate_iambic_sentence(candidate_provider,
     word_sequence.append(start_word)
     timeout = time.time() + timeout_seconds
     while not is_full_iambic(word_sequence):
-        candidates = candidate_provider.candidates(word_sequence[-1])
+        candidates = candidate_provider.candidates(word_sequence)
         random.shuffle(candidates)
         for candidate in candidates:
             if candidate in dead_ends["".join(word_sequence)]:
@@ -167,9 +172,11 @@ def generate_iambic_sentence(candidate_provider,
                     format(timeout_seconds))
     return word_sequence
 
+
 class InsufficientSentencesError(Exception):
     """When the candidate pool isn't rich enough to generate a sonnet."""
     pass
+
 
 def generate_sonnet(candidate_provider, candidate_pool_size=500):
     """Generates a Shakespearian sonnet of 14 lines of iambic pentameter.
@@ -183,6 +190,11 @@ def generate_sonnet(candidate_provider, candidate_pool_size=500):
 
     Returns:
         string: The generated sonnet.
+
+    Raises:
+         InsufficientSentencesError: When the candidate pool is not rich
+            enough.
+
     """
     sentences = set()
     for _ in range(candidate_pool_size):
@@ -212,10 +224,9 @@ def generate_sonnet(candidate_provider, candidate_pool_size=500):
         poem.append(couplets[a][b])
     return "\n".join(poem)
 
+
 def main():
-    corpus = itertools.chain(gutenberg.words('blake-poems.txt'),
-                             gutenberg.words('austen-sense.txt'),
-                             gutenberg.words('whitman-leaves.txt'))
+    corpus = gutenberg.words('blake-poems.txt')
     provider = BigramWordCandidateProvider(corpus)
     print(generate_sonnet(provider))
 
