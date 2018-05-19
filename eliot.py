@@ -1,4 +1,11 @@
-"""Generates a random Shakespearian sonnet.
+"""Eliot is a tool for poetry generation.
+
+It works by generating words from a language model, constrained by another
+model of the scansion and rhyme proper to a particular poetic form.
+
+Currently it generates Shakespearian sonnets only. The language model is a
+bigram model from NLTK and the poetry model uses regular expressions to
+match appropriate stress sequences.
 
 TODO: Add line generation method that works backwards from rhyming word.
 TODO: After doing the above, implement a more efficient sonnet generation algorithm.
@@ -10,12 +17,15 @@ TODO: Predict the candidates based on the whole current word sequence.
 TODO: Don't choose randomly from candidate set. Shuffled sample based on the distribution.
 """
 
-import nltk
-import pronouncing
+import itertools
 import random
 import re
-
+import time
 from collections import defaultdict
+
+import pronouncing
+from nltk import bigrams, ConditionalFreqDist
+from nltk.corpus import gutenberg
 
 PARTIAL_IAMBIC_RE = re.compile(r"^0$|^(0[12]){1,5}0?$|^(0[12]){1,4}0$")
 FULL_IAMBIC_RE = re.compile(r"^(0[12]){5}0?$")
@@ -85,13 +95,13 @@ class BigramWordCandidateProvider(object):
     """Provides candidate next words given a word using a bigram model."""
 
     def __init__(self, corpus):
-        """Constructor of the BigramWordCandidateProvider.
+        """Initializer of the BigramWordCandidateProvider.
 
         Args:
             corpus: An iterable of word strings.
         """
-        _bigrams = nltk.bigrams(corpus)
-        self._cfd = nltk.ConditionalFreqDist(_bigrams)
+        _bigrams = bigrams(corpus)
+        self._cfd = ConditionalFreqDist(_bigrams)
 
     def candidates(self, word):
         """Returns a list of candidate next words given a word.
@@ -103,8 +113,13 @@ class BigramWordCandidateProvider(object):
     def random_word(self):
         return random.choice(list(self._cfd.items()))[0]
 
+class GenerationTimeout(Exception):
+    """Raised when generating a line of poetry takes too long."""
+    pass
 
-def generate_iambic_sentence(candidate_provider, start_word=None):
+def generate_iambic_sentence(candidate_provider,
+                             start_word=None,
+                             timeout_seconds=10):
     """Generates a random iambic sentence.
 
     Args:
@@ -112,9 +127,15 @@ def generate_iambic_sentence(candidate_provider, start_word=None):
             random_word() methods.
         start_word (string): The first word of the sentence. Not guaranteed to
             be used if no iambic sentence can be generated from it.
+        timeout_seconds (int): number of seconds after which to give up on
+            generating a random iambic sentence.
 
     Returns:
         list: The words of the iambic sentence.
+
+    Raises:
+        GenerationTimeout: When we fail in generating an iambic sentence before
+            the supplied timeout.
 
     """
     dead_ends = defaultdict(list)
@@ -122,6 +143,7 @@ def generate_iambic_sentence(candidate_provider, start_word=None):
     if not start_word:
         start_word = candidate_provider.random_word()
     word_sequence.append(start_word)
+    timeout = time.time() + timeout_seconds
     while not is_full_iambic(word_sequence):
         candidates = candidate_provider.candidates(word_sequence[-1])
         random.shuffle(candidates)
@@ -139,6 +161,10 @@ def generate_iambic_sentence(candidate_provider, start_word=None):
                 word_sequence.pop()
             else:
                 word_sequence[0] = candidate_provider.random_word()
+        if time.time() > timeout:
+            raise GenerationTimeout(
+                "Iambic sentence generation timed out after {} seconds.".
+                    format(timeout_seconds))
     return word_sequence
 
 class InsufficientSentencesError(Exception):
@@ -179,7 +205,7 @@ def generate_sonnet(candidate_provider, candidate_pool_size=500):
     couplets = list(filter(lambda c: len(c) > 2, clusters.values()))
     random.shuffle(couplets)
     couplets = [random.sample(couplet, 2) for couplet in couplets]
-    
+
     poem = []
     for a, b in zip((0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 6),
                     (0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1)):
@@ -187,8 +213,10 @@ def generate_sonnet(candidate_provider, candidate_pool_size=500):
     return "\n".join(poem)
 
 def main():
-    provider = BigramWordCandidateProvider(
-        nltk.corpus.gutenberg.words('melville-moby_dick.txt'))
+    corpus = itertools.chain(gutenberg.words('blake-poems.txt'),
+                             gutenberg.words('austen-sense.txt'),
+                             gutenberg.words('whitman-leaves.txt'))
+    provider = BigramWordCandidateProvider(corpus)
     print(generate_sonnet(provider))
 
 
