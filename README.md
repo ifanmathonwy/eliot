@@ -6,9 +6,10 @@ Eliot is a tool for poetry generation. It works by generating words from a
 language model, constrained by another model of the scansion and rhyme
 proper to a particular poetic form.
 
-Currently it generates Shakespearian sonnets only. The language model is a
-bigram model from NLTK and the poetry model uses regular expressions to
-match appropriate stress sequences.
+Currently it generates Shakespearian sonnets and limericks only. 
+
+The language model is a bigram model from NLTK and the poetry model uses 
+regular expressions to match appropriate stress sequences.
 
 ## Examples
 
@@ -42,3 +43,15 @@ William Blake:
 > beside the secret love a tangle spray
 >
 > delights in hell in hell in senseless clay
+
+And here is a sonnet generated from the works of G. K. Chesterton:
+
+> minority of a position
+>
+> examining it a commission
+>
+> essentially an
+>
+> presentable man
+>
+> agility hardly patrician

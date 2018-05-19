@@ -26,9 +26,13 @@ import pronouncing
 from nltk import bigrams, ConditionalFreqDist
 from nltk.corpus import gutenberg
 
-PARTIAL_IAMBIC_RE = re.compile(r"^0$|^(0[12]){1,5}0?$|^(0[12]){1,4}0$")
+PARTIAL_IAMBIC_RE = re.compile(r"^0$|^(0[12]){1,5}0?$")
 FULL_IAMBIC_RE = re.compile(r"^(0[12]){5}0?$")
 
+PARTIAL_ANAPAESTIC_DIMETER_RE = re.compile(r"^00?$|^(00?[12])((00[12])0?)?$")
+FULL_ANAPAESTIC_DIMETER_RE = re.compile(r"^(00?[12])(00[12])0?$")
+PARTIAL_ANAPAESTIC_TRIMETER_RE = re.compile(r"^00?$|^(00?[12])(00[12]){1,2}0?$")
+FULL_ANAPAESTIC_TRIMETER_RE = re.compile(r"^(00?[12])(00[12]){2}0?$")
 
 def stresses_for_word_sequence(word_sequence):
     """Gets the CMUDict stress sequence for a given word sequence.
@@ -92,6 +96,37 @@ def is_full_iambic(word_sequence):
     else:
         return False
 
+def is_partial_anapaestic_dimeter(word_sequence):
+    stresses = stresses_for_word_sequence(word_sequence)
+    if PARTIAL_ANAPAESTIC_DIMETER_RE.match(stresses):
+        return True
+    else:
+
+        return False
+
+def is_full_anapaestic_dimeter(word_sequence):
+    stresses = stresses_for_word_sequence(word_sequence)
+    if FULL_ANAPAESTIC_DIMETER_RE.match(stresses):
+        return True
+    else:
+
+        return False
+
+def is_partial_anapaestic_trimeter(word_sequence):
+    stresses = stresses_for_word_sequence(word_sequence)
+    if PARTIAL_ANAPAESTIC_TRIMETER_RE.match(stresses):
+        return True
+    else:
+
+        return False
+
+def is_full_anapaestic_trimeter(word_sequence):
+    stresses = stresses_for_word_sequence(word_sequence)
+    if FULL_ANAPAESTIC_TRIMETER_RE.match(stresses):
+        return True
+    else:
+
+        return False
 
 class BigramWordCandidateProvider(object):
     """Provides candidate next words given a word using a bigram model."""
@@ -121,6 +156,40 @@ class GenerationTimeout(Exception):
     """Raised when generating a line of poetry takes too long."""
     pass
 
+def generate_metered_sentence(candidate_provider,
+                              partial_validator,
+                              full_validator,
+                              start_word=None,
+                              timeout_seconds=10):
+    dead_ends = defaultdict(list)
+    word_sequence = []
+    if not start_word:
+        start_word = candidate_provider.random_word()
+    word_sequence.append(start_word)
+    timeout = time.time() + timeout_seconds
+    while not full_validator(word_sequence):
+        print(" ".join(word_sequence))
+        candidates = candidate_provider.candidates(word_sequence)
+        random.shuffle(candidates)
+        for candidate in candidates:
+            if candidate in dead_ends["".join(word_sequence)]:
+                continue
+            extension = word_sequence + [candidate.lower()]
+            if partial_validator(extension):
+                word_sequence.append(candidate)
+                break
+        else:
+            if len(word_sequence) > 1:
+                dead_ends["".join(word_sequence[:-1])].append(
+                    word_sequence[-1])
+                word_sequence.pop()
+            else:
+                word_sequence[0] = candidate_provider.random_word()
+        if time.time() > timeout:
+            raise GenerationTimeout(
+                "Metered sentence generation timed out after {} seconds.".
+                    format(timeout_seconds))
+    return word_sequence
 
 def generate_iambic_sentence(candidate_provider,
                              start_word=None,
@@ -143,39 +212,69 @@ def generate_iambic_sentence(candidate_provider,
             the supplied timeout.
 
     """
-    dead_ends = defaultdict(list)
-    word_sequence = []
-    if not start_word:
-        start_word = candidate_provider.random_word()
-    word_sequence.append(start_word)
-    timeout = time.time() + timeout_seconds
-    while not is_full_iambic(word_sequence):
-        candidates = candidate_provider.candidates(word_sequence)
-        random.shuffle(candidates)
-        for candidate in candidates:
-            if candidate in dead_ends["".join(word_sequence)]:
-                continue
-            extension = word_sequence + [candidate.lower()]
-            if is_partial_iambic(extension):
-                word_sequence.append(candidate)
-                break
-        else:
-            if len(word_sequence) > 1:
-                dead_ends["".join(word_sequence[:-1])].append(
-                    word_sequence[-1])
-                word_sequence.pop()
-            else:
-                word_sequence[0] = candidate_provider.random_word()
-        if time.time() > timeout:
-            raise GenerationTimeout(
-                "Iambic sentence generation timed out after {} seconds.".
-                    format(timeout_seconds))
-    return word_sequence
-
+    return generate_metered_sentence(candidate_provider,
+                                     is_partial_iambic,
+                                     is_full_iambic,
+                                     start_word,
+                                     timeout_seconds)
 
 class InsufficientSentencesError(Exception):
-    """When the candidate pool isn't rich enough to generate a sonnet."""
+    """When the candidate pool isn't rich enough to generate a poem."""
     pass
+
+def generate_limerick(candidate_provider, candidate_pool_size=250):
+    dimeter = set()
+    trimeter = set()
+    for _ in range(candidate_pool_size):
+        sentence = generate_metered_sentence(candidate_provider,
+                                             is_partial_anapaestic_dimeter,
+                                             is_full_anapaestic_dimeter)
+        dimeter.add(" ".join(sentence))
+    for _ in range(candidate_pool_size):
+        sentence = generate_metered_sentence(candidate_provider,
+                                             is_partial_anapaestic_trimeter,
+                                             is_full_anapaestic_trimeter)
+        trimeter.add(" ".join(sentence))
+
+    # Rhyme scheme is AABBA. We need a triplet of A and a couplet of B.
+    # First find the couplet of B.
+    dimeter_clusters = defaultdict(list)
+    while not list(filter(lambda c: len(c) > 2, dimeter_clusters.values())):
+        try:
+            sentence = dimeter.pop()
+        except KeyError:
+            raise InsufficientSentencesError(
+                "Candidate pool is not rich enough!")
+        last_word = sentence.split(" ")[-1]
+        last_word_phones = pronouncing.phones_for_word(last_word)[0]
+        rhyming_part = pronouncing.rhyming_part(last_word_phones)
+        key = rhyming_part
+        if last_word not in [s.split(" ")[-1] for s in dimeter_clusters[key]]:
+            dimeter_clusters[key].append(sentence)
+    couplet = list(filter(lambda c: len(c) > 2, dimeter_clusters.values()))[0]
+
+    # Now find the triplet of A
+    trimeter_clusters = defaultdict(list)
+    while not list(filter(lambda c: len(c) > 3, trimeter_clusters.values())):
+        try:
+            sentence = trimeter.pop()
+        except KeyError:
+            raise InsufficientSentencesError(
+                "Candidate pool is not rich enough!")
+        last_word = sentence.split(" ")[-1]
+        last_word_phones = pronouncing.phones_for_word(last_word)[0]
+        rhyming_part = pronouncing.rhyming_part(last_word_phones)
+        key = rhyming_part
+        if last_word not in [s.split(" ")[-1] for s in trimeter_clusters[key]]:
+            trimeter_clusters[key].append(sentence)
+    triplet = list(filter(lambda c: len(c) > 3, trimeter_clusters.values()))[0]
+    poem = []
+    poem.append(triplet[0])
+    poem.append(triplet[1])
+    poem.append(couplet[0])
+    poem.append(couplet[1])
+    poem.append(triplet[2])
+    return "\n".join(poem)
 
 
 def generate_sonnet(candidate_provider, candidate_pool_size=500):
@@ -226,9 +325,9 @@ def generate_sonnet(candidate_provider, candidate_pool_size=500):
 
 
 def main():
-    corpus = gutenberg.words('blake-poems.txt')
+    corpus = gutenberg.words('chesterton-brown.txt')
     provider = BigramWordCandidateProvider(corpus)
-    print(generate_sonnet(provider))
+    print(generate_limerick(provider))
 
 
 if __name__ == "__main__":
