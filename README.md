@@ -44,7 +44,7 @@ William Blake:
 >
 > delights in hell in hell in senseless clay
 
-And here is a sonnet generated from the works of G. K. Chesterton:
+And here are two limericks generated from the works of G. K. Chesterton:
 
 > minority of a position
 >
@@ -55,3 +55,13 @@ And here is a sonnet generated from the works of G. K. Chesterton:
 > presentable man
 >
 > agility hardly patrician
+
+> explaining away a delusion
+>
+> hegemony quite in allusion
+>
+> electrical chair
+>
+> entirely their
+>
+> protection against the conclusion
