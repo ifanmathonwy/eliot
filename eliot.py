@@ -7,11 +7,10 @@ Currently it generates Shakespearian sonnets only. The language model is a
 bigram model from NLTK and the poetry model uses regular expressions to
 match appropriate stress sequences.
 
-TODO: Add line generation method that works backwards from rhyming word.
-TODO: After doing the above, implement a more efficient sonnet generation algorithm.
+TODO: Add tests.
 TODO: Handle Petrarchan sonnets.
 TODO: Handle some kind of neural language model.
-TODO: Cluster lines by meaning as well as rhyme.
+TODO: Allow N-grams of arbitrary order.
 TODO: Predict the candidates based on the whole current word sequence.
 TODO: Don't choose randomly from candidate set. Shuffled sample based on the distribution.
 TODO: Implement some kind of PoemBuilder class.

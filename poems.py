@@ -1,4 +1,6 @@
 """Classes for generating poems of various meters.
+
+TODO: PoemBuilder class generalizing the rhyme-finding logic.
 """
 
 import random
@@ -134,6 +136,7 @@ class InsufficientSentencesError(Exception):
 
 class Sonnet(object):
     """TODO: Add documentation."""
+
     def __init__(self, candidate_provider, candidate_pool_size=500):
         self.provider = candidate_provider
         self.candidate_pool_size = candidate_pool_size
@@ -171,6 +174,7 @@ class Sonnet(object):
 
 class Limerick(object):
     """TODO: Add documentation."""
+
     def __init__(self,
                  candidate_provider,
                  candidate_pool_a_size=300,
@@ -231,3 +235,11 @@ class Limerick(object):
                 couplet[1],
                 triplet[2]]
         return "\n".join(poem)
+
+class PoemMaker(object):
+    """
+    Register a set of equivalence classes in terms of meter and rhyme.
+    Register where a representative of each equivalence class must occur in the poem.
+
+    """
+    pass
