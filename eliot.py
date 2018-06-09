@@ -17,6 +17,8 @@ TODO: Implement some kind of PoemBuilder class.
 """
 
 from collections import defaultdict
+import itertools
+import logging
 import random
 import re
 import time
@@ -180,7 +182,7 @@ class Sonnet(object):
         self.form_name = "Shakespearian sonnet."
 
     def generate(self):
-        print("Generating a {}...".format(self.form_name))
+        logging.info("Generating a {}...".format(self.form_name))
         sentences = set()
         for _ in range(self.candidate_pool_size):
             sentence = generate_metered_sentence(self.provider,
@@ -224,7 +226,7 @@ class Limerick(object):
         self.form_name = "limerick"
 
     def generate(self):
-        print("Generating a {}...".format(self.form_name))
+        logging.info("Generating a {}...".format(self.form_name))
         trimeter = set()
         dimeter = set()
         for _ in range(self.candidate_pool_a_size):
@@ -279,7 +281,9 @@ class Limerick(object):
 
 
 def main():
-    corpus = gutenberg.words('chesterton-brown.txt')
+    corpus = itertools.chain(gutenberg.words('blake-poems.txt'),
+                             gutenberg.words('austen-sense.txt'),
+                             gutenberg.words('whitman-leaves.txt'))
     provider = BigramWordCandidateProvider(corpus)
     sonnet = Sonnet(provider)
     print(sonnet.generate())
