@@ -188,7 +188,7 @@ def get_rhyming_groups(group_size, number_groups, pool):
          InsufficientSentencesError: if the candidate pool is not rich enough.
     """
     clusters = defaultdict(list)
-    while len(list(filter(lambda c: len(c) > group_size, clusters.values()))) < number_groups:
+    while len(list(filter(lambda c: len(c) >= group_size, clusters.values()))) < number_groups:
         try:
             sentence = pool.pop()
         except KeyError:
@@ -200,7 +200,7 @@ def get_rhyming_groups(group_size, number_groups, pool):
         key = rhyming_part
         if last_word not in [s.split(" ")[-1] for s in clusters[key]]:
             clusters[key].append(sentence)
-    groups = list(filter(lambda c: len(c) > group_size, clusters.values()))
+    groups = list(filter(lambda c: len(c) >= group_size, clusters.values()))
     random.shuffle(groups)
     return [random.sample(group, group_size) for group in groups]
 
@@ -211,7 +211,6 @@ def generate_candidate_pool(size, provider, validator):
         sentence = generate_metered_sentence(provider,
                                              validator.partial,
                                              validator.full)
-        print("generated ", ' '.join(sentence))
         pool.add(' '.join(sentence))
     return pool
 
@@ -276,15 +275,71 @@ class Limerick(object):
             poem.append(group_dict[letter].pop())
         return "\n".join(poem)
 
+class PoemDesignError(Exception):
+    """Raised when a poem design is ill-formed."""
+    pass
+
+class Poem(object):
+    """Encapsulates the logic for generating a poem."""
+
+    def __init__(self, candidate_provider):
+        self.provider = candidate_provider
+        self.validators = {}
+        self.pool_sizes = {}
+        self.scheme_to_type = defaultdict(lambda: None)
+        self.scheme_counter = defaultdict(int)
+        self.candidate_pools = {}
+
+    def register_line_type(self, name, validator, candidate_pool_size=600):
+        self.validators[name] = validator
+        self.pool_sizes[name] = candidate_pool_size
+
+    def design(self, rhyme_scheme, type_scheme):
+        self.rhyme_scheme = rhyme_scheme
+        self.type_scheme = type_scheme
+        assert len(self.rhyme_scheme) == len(self.type_scheme)
+        for rhyme, type in zip(self.rhyme_scheme, self.type_scheme):
+            if self.scheme_to_type[rhyme] and self.scheme_to_type[rhyme] != type:
+                raise PoemDesignError("Poem design is ill-formed.")
+            else:
+                self.scheme_to_type[rhyme] = type
+                self.scheme_counter[rhyme] += 1
+
+    def generate(self):
+        if not self.candidate_pools:
+            for type in self.validators:
+                self.candidate_pools[type] = generate_candidate_pool(self.pool_sizes[type],
+                                                                     self.provider,
+                                                                     self.validators[type])
+        group_dict = {}
+        for rhyme, count in self.scheme_counter.items():
+            # Use a type_to_rhyme dict to efficiently set these without repetition.
+            # Maybe a map from (type, count) : {'a', 'b', ... }?
+            group_dict[rhyme] = get_rhyming_groups(count,
+                                                   1,
+                                                   self.candidate_pools[self.scheme_to_type[rhyme]])[0]
+
+        poem = []
+        for letter in self.rhyme_scheme:
+            poem.append(group_dict[letter].pop())
+        return "\n".join(poem)
+
+
 def main():
     corpus = itertools.chain(gutenberg.words('blake-poems.txt'),
                              gutenberg.words('austen-sense.txt'),
                              gutenberg.words('whitman-leaves.txt'))
     provider = BigramWordCandidateProvider(corpus)
-    sonnet = Sonnet(provider)
-    print(sonnet.generate())
-    limerick = Limerick(provider)
-    print(limerick.generate())
+    poem = Poem(provider)
+    poem.register_line_type("iambic pentameter", iambic_pentameter_validator)
+    poem.design(['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g'],
+                ["iambic pentameter"] * 14)
+    print(poem.generate())
+
+    # sonnet = Sonnet(provider)
+    # print(sonnet.generate())
+    # limerick = Limerick(provider)
+    # print(limerick.generate())
 
 
 if __name__ == "__main__":
