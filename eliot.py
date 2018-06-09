@@ -83,6 +83,10 @@ def get_meter_validator(meter_re):
 
     return validator
 
+class Validator(object):
+    def __init__(self, partial_validator, full_validator):
+        self.partial = partial_validator
+        self.full = full_validator
 
 # Iambic pentameter is used in the sonnet.
 # An iamb is a metrical foot consisting of an unstressed (0 stress) syllable,
@@ -94,6 +98,8 @@ FULL_IAMBIC_PENTAMETER_RE = re.compile(r'^(0[12]){5}0?$')
 
 is_partial_iambic_pentameter = get_meter_validator(PARTIAL_IAMBIC_PENTAMETER_RE)
 is_full_iambic_pentameter = get_meter_validator(FULL_IAMBIC_PENTAMETER_RE)
+iambic_pentameter_validator = Validator(is_partial_iambic_pentameter,
+                                        is_full_iambic_pentameter)
 
 # Anapaestic dimeter and trimeter are used in the limerick.
 PARTIAL_ANAPAESTIC_DIMETER_RE = re.compile(r'^00?$|^(00?[12])((00[12])0?)?$')
@@ -103,9 +109,12 @@ FULL_ANAPAESTIC_TRIMETER_RE = re.compile(r'^(00?[12])(00[12]){2}0?$')
 
 is_partial_anapaestic_dimeter = get_meter_validator(PARTIAL_ANAPAESTIC_DIMETER_RE)
 is_full_anapaestic_dimeter = get_meter_validator(FULL_ANAPAESTIC_DIMETER_RE)
+anapaestic_dimeter_validator = Validator(is_partial_anapaestic_dimeter,
+                                         is_full_anapaestic_dimeter)
 is_partial_anapaestic_trimeter = get_meter_validator(PARTIAL_ANAPAESTIC_TRIMETER_RE)
 is_full_anapaestic_trimeter = get_meter_validator(FULL_ANAPAESTIC_TRIMETER_RE)
-
+anapaestic_trimeter_validator = Validator(is_partial_anapaestic_trimeter,
+                                          is_full_anapaestic_trimeter)
 
 class GenerationTimeout(Exception):
     """Raised when generating a line of poetry takes too long."""
@@ -167,6 +176,44 @@ def generate_metered_sentence(candidate_provider,
                 'Metered sentence generation timed out after {} seconds.'.format(timeout_seconds))
     return word_sequence
 
+def get_rhyming_groups(group_size, number_groups, pool):
+    """Returns a list of rhyming groups of the given size from the given candidate pool.
+
+    Args:
+        group_size (int): number of lines in the rhyming group.
+        number_groups (int): number of rhyming groups.
+        pool (list) : candidate pool from which to draw lines.
+
+    Raises:
+         InsufficientSentencesError: if the candidate pool is not rich enough.
+    """
+    clusters = defaultdict(list)
+    while len(list(filter(lambda c: len(c) > group_size, clusters.values()))) < number_groups:
+        try:
+            sentence = pool.pop()
+        except KeyError:
+            raise InsufficientSentencesError(
+                'Candidate pool is not rich enough!')
+        last_word = sentence.split(" ")[-1]
+        last_word_phones = pronouncing.phones_for_word(last_word)[0]
+        rhyming_part = pronouncing.rhyming_part(last_word_phones)
+        key = rhyming_part
+        if last_word not in [s.split(" ")[-1] for s in clusters[key]]:
+            clusters[key].append(sentence)
+    groups = list(filter(lambda c: len(c) > group_size, clusters.values()))
+    random.shuffle(groups)
+    return [random.sample(couplet, group_size) for couplet in couplets]
+
+
+def generate_candidate_pool(size, provider, validator):
+    pool = set()
+    for _ in range(size):
+        sentence = generate_metered_sentence(provider,
+                                             validator.partial,
+                                             validator.full)
+        print("generated ", ' '.join(sentence))
+        pool.add(' '.join(sentence))
+    return pool
 
 class InsufficientSentencesError(Exception):
     """When the candidate pool isn't rich enough to generate a poem."""
@@ -183,29 +230,10 @@ class Sonnet(object):
 
     def generate(self):
         logging.info("Generating a {}...".format(self.form_name))
-        sentences = set()
-        for _ in range(self.candidate_pool_size):
-            sentence = generate_metered_sentence(self.provider,
-                                                 is_partial_iambic_pentameter,
-                                                 is_full_iambic_pentameter)
-            sentences.add(" ".join(sentence))
-
-        clusters = defaultdict(list)
-        while len(list(filter(lambda c: len(c) > 2, clusters.values()))) < 7:
-            try:
-                sentence = sentences.pop()
-            except KeyError:
-                raise InsufficientSentencesError(
-                    'Candidate pool is not rich enough!')
-            last_word = sentence.split(" ")[-1]
-            last_word_phones = pronouncing.phones_for_word(last_word)[0]
-            rhyming_part = pronouncing.rhyming_part(last_word_phones)
-            key = rhyming_part
-            if last_word not in [s.split(" ")[-1] for s in clusters[key]]:
-                clusters[key].append(sentence)
-        couplets = list(filter(lambda c: len(c) > 2, clusters.values()))
-        random.shuffle(couplets)
-        couplets = [random.sample(couplet, 2) for couplet in couplets]
+        sentences = generate_candidate_pool(self.candidate_pool_size,
+                                            self.provider,
+                                            iambic_pentameter_validator)
+        couplets = get_rhyming_groups(2, 7, sentences)
         poem = []
         for a, b in zip((0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 6),
                         (0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1)):
@@ -227,51 +255,20 @@ class Limerick(object):
 
     def generate(self):
         logging.info("Generating a {}...".format(self.form_name))
-        trimeter = set()
-        dimeter = set()
-        for _ in range(self.candidate_pool_a_size):
-            sentence = generate_metered_sentence(self.provider,
-                                                 is_partial_anapaestic_trimeter,
-                                                 is_full_anapaestic_trimeter)
-            trimeter.add(' '.join(sentence))
-        for _ in range(self.candidate_pool_b_size):
-            sentence = generate_metered_sentence(self.provider,
-                                                 is_partial_anapaestic_dimeter,
-                                                 is_full_anapaestic_dimeter)
-            dimeter.add(' '.join(sentence))
+        trimeter = generate_candidate_pool(self.candidate_pool_a_size,
+                                           self.provider,
+                                           anapaestic_trimeter_validator)
+        dimeter = generate_candidate_pool(self.candidate_pool_b_size,
+                                          self.provider,
+                                          anapaestic_dimeter_validator)
 
         # Rhyme scheme is AABBA. We need a triplet of A and a couplet of B.
         # First find the couplet of B.
-        dimeter_clusters = defaultdict(list)
-        while not list(filter(lambda c: len(c) > 2, dimeter_clusters.values())):
-            try:
-                sentence = dimeter.pop()
-            except KeyError:
-                raise InsufficientSentencesError(
-                    "Candidate pool is not rich enough!")
-            last_word = sentence.split(" ")[-1]
-            last_word_phones = pronouncing.phones_for_word(last_word)[0]
-            rhyming_part = pronouncing.rhyming_part(last_word_phones)
-            key = rhyming_part
-            if last_word not in [s.split(" ")[-1] for s in dimeter_clusters[key]]:
-                dimeter_clusters[key].append(sentence)
-        couplet = list(filter(lambda c: len(c) > 2, dimeter_clusters.values()))[0]
+        couplet = get_rhyming_groups(2, 1, dimeter)[0]
 
-        # Now find the triplet of A
-        trimeter_clusters = defaultdict(list)
-        while not list(filter(lambda c: len(c) > 3, trimeter_clusters.values())):
-            try:
-                sentence = trimeter.pop()
-            except KeyError:
-                raise InsufficientSentencesError(
-                    "Candidate pool is not rich enough!")
-            last_word = sentence.split(" ")[-1]
-            last_word_phones = pronouncing.phones_for_word(last_word)[0]
-            rhyming_part = pronouncing.rhyming_part(last_word_phones)
-            key = rhyming_part
-            if last_word not in [s.split(" ")[-1] for s in trimeter_clusters[key]]:
-                trimeter_clusters[key].append(sentence)
-        triplet = list(filter(lambda c: len(c) > 3, trimeter_clusters.values()))[0]
+        # Now find the triplet of A.
+        triplet = get_rhyming_groups(3, 1, trimeter)[0]
+
         poem = [triplet[0],
                 triplet[1],
                 couplet[0],
