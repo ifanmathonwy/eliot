@@ -1,19 +1,13 @@
-"""Eliot is a tool for poetry generation.
+"""Eliot is a library for poetry generation.
 
 It works by generating words from a language model, constrained by another
 model of the scansion and rhyme proper to a particular poetic form.
 
-Currently it generates Shakespearian sonnets and Limericks only. The language model is a
-bigram model from NLTK and the poetry model uses regular expressions to
-match appropriate stress sequences.
+The language model is a bigram model from NLTK and the poetry model uses
+regular expressions to match appropriate stress sequences.
 
 TODO: Add tests.
-TODO: Handle Petrarchan sonnets.
-TODO: Handle some kind of neural language model.
-TODO: Allow N-grams of arbitrary order.
-TODO: Predict the candidates based on the whole current word sequence.
-TODO: Don't choose randomly from candidate set. Shuffled sample based on the distribution.
-TODO: Implement some kind of PoemBuilder class.
+TODO: Specify precise repetition, not just rhyme, in the rhyme scheme.
 """
 
 from collections import defaultdict
@@ -176,6 +170,22 @@ def generate_metered_sentence(candidate_provider,
                 'Metered sentence generation timed out after {} seconds.'.format(timeout_seconds))
     return word_sequence
 
+
+def generate_candidate_pool(size, provider, validator):
+    pool = set()
+    for _ in range(size):
+        sentence = generate_metered_sentence(provider,
+                                             validator.partial,
+                                             validator.full)
+        pool.add(' '.join(sentence))
+    return pool
+
+
+class InsufficientSentencesError(Exception):
+    """When the candidate pool isn't rich enough to generate a poem."""
+    pass
+
+
 def get_rhyming_groups(group_size, number_groups, pool):
     """Returns a list of rhyming groups of the given size from the given candidate pool.
 
@@ -204,77 +214,6 @@ def get_rhyming_groups(group_size, number_groups, pool):
     random.shuffle(groups)
     return [random.sample(group, group_size) for group in groups]
 
-
-def generate_candidate_pool(size, provider, validator):
-    pool = set()
-    for _ in range(size):
-        sentence = generate_metered_sentence(provider,
-                                             validator.partial,
-                                             validator.full)
-        pool.add(' '.join(sentence))
-    return pool
-
-class InsufficientSentencesError(Exception):
-    """When the candidate pool isn't rich enough to generate a poem."""
-    pass
-
-
-class Sonnet(object):
-    """Encapsulates logic for generating a Shakespearian sonnet."""
-
-    def __init__(self, candidate_provider, candidate_pool_size=500):
-        self.provider = candidate_provider
-        self.candidate_pool_size = candidate_pool_size
-        self.form_name = "Shakespearian sonnet."
-
-    def generate(self):
-        logging.info("Generating a {}...".format(self.form_name))
-        sentences = generate_candidate_pool(self.candidate_pool_size,
-                                            self.provider,
-                                            iambic_pentameter_validator)
-        group_dict = dict(zip(list('abcdefg'), get_rhyming_groups(2, 7, sentences)))
-        poem = []
-        scheme = ['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g']
-        for letter in scheme:
-            poem.append(group_dict[letter].pop())
-        return "\n".join(poem)
-
-
-class Limerick(object):
-    """Encapsulates logic for generating a limerick."""
-
-    def __init__(self,
-                 candidate_provider,
-                 candidate_pool_a_size=300,
-                 candidate_pool_b_size=200):
-        self.provider = candidate_provider
-        self.candidate_pool_a_size = candidate_pool_a_size
-        self.candidate_pool_b_size = candidate_pool_b_size
-        self.form_name = "limerick"
-
-    def generate(self):
-        logging.info("Generating a {}...".format(self.form_name))
-        trimeter = generate_candidate_pool(self.candidate_pool_a_size,
-                                           self.provider,
-                                           anapaestic_trimeter_validator)
-        dimeter = generate_candidate_pool(self.candidate_pool_b_size,
-                                          self.provider,
-                                          anapaestic_dimeter_validator)
-
-        group_dict = {}
-        # Rhyme scheme is AABBA. We need a triplet of A and a couplet of B.
-        # First find the couplet of B.
-        group_dict['b'] = get_rhyming_groups(2, 1, dimeter)[0]
-
-        # Now find the triplet of A.
-        group_dict['a'] = get_rhyming_groups(3, 1, trimeter)[0]
-
-        poem = []
-        scheme = ['a', 'a', 'b', 'b', 'a']
-        for letter in scheme:
-            poem.append(group_dict[letter].pop())
-        return "\n".join(poem)
-
 class PoemDesignError(Exception):
     """Raised when a poem design is ill-formed."""
     pass
@@ -283,12 +222,14 @@ class Poem(object):
     """Encapsulates the logic for generating a poem."""
 
     def __init__(self, candidate_provider):
+        # TODO: Add way to specify line type and schemes at initialization.
         self.provider = candidate_provider
         self.validators = {}
         self.pool_sizes = {}
         self.scheme_to_type = defaultdict(lambda: None)
         self.scheme_counter = defaultdict(int)
         self.candidate_pools = {}
+        self.type_to_scheme = defaultdict(set)
 
     def register_line_type(self, name, validator, candidate_pool_size=600):
         self.validators[name] = validator
@@ -304,6 +245,10 @@ class Poem(object):
             else:
                 self.scheme_to_type[rhyme] = type
                 self.scheme_counter[rhyme] += 1
+        # For each scheme, find out its type and its count.
+        for rhyme, count in self.scheme_counter.items():
+            type = self.scheme_to_type[rhyme]
+            self.type_to_scheme[(type, count)].add(rhyme)
 
     def generate(self):
         if not self.candidate_pools:
@@ -312,34 +257,50 @@ class Poem(object):
                                                                      self.provider,
                                                                      self.validators[type])
         group_dict = {}
-        for rhyme, count in self.scheme_counter.items():
-            # Use a type_to_rhyme dict to efficiently set these without repetition.
-            # Maybe a map from (type, count) : {'a', 'b', ... }?
-            group_dict[rhyme] = get_rhyming_groups(count,
-                                                   1,
-                                                   self.candidate_pools[self.scheme_to_type[rhyme]])[0]
+        # Work backwards from what is needed at the end of the function to deobfuscate
+        # the function.
+        for (type, count), rhymes in self.type_to_scheme.items():
+            rhyming_groups = get_rhyming_groups(count,
+                                                len(rhymes),
+                                                self.candidate_pools[type])
+            for rhyme in rhymes:
+                group_dict[rhyme] = rhyming_groups.pop()
 
         poem = []
         for letter in self.rhyme_scheme:
             poem.append(group_dict[letter].pop())
         return "\n".join(poem)
 
+def generate_sonnet(provider):
+    sonnet = Poem(provider)
+    sonnet.register_line_type("iambic pentameter", iambic_pentameter_validator)
+    sonnet.design(['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g'],
+                ["iambic pentameter"] * 14)
+    print(sonnet.generate())
+
+def generate_limerick(provider):
+    limerick = Poem(provider)
+    limerick.register_line_type("anapaestic dimeter",
+                                anapaestic_dimeter_validator,
+                                candidate_pool_size=200)
+    limerick.register_line_type("anapaestic trimeter",
+                                anapaestic_trimeter_validator,
+                                candidate_pool_size=250)
+    limerick.design(['a', 'a', 'b', 'b', 'a'],
+                    ['anapaestic trimeter',
+                     'anapaestic trimeter',
+                     'anapaestic dimeter',
+                     'anapaestic dimeter',
+                     'anapaestic trimeter'])
+    print(limerick.generate())
 
 def main():
     corpus = itertools.chain(gutenberg.words('blake-poems.txt'),
                              gutenberg.words('austen-sense.txt'),
                              gutenberg.words('whitman-leaves.txt'))
     provider = BigramWordCandidateProvider(corpus)
-    poem = Poem(provider)
-    poem.register_line_type("iambic pentameter", iambic_pentameter_validator)
-    poem.design(['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g'],
-                ["iambic pentameter"] * 14)
-    print(poem.generate())
-
-    # sonnet = Sonnet(provider)
-    # print(sonnet.generate())
-    # limerick = Limerick(provider)
-    # print(limerick.generate())
+    generate_sonnet(provider)
+    generate_limerick(provider)
 
 
 if __name__ == "__main__":

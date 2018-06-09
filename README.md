@@ -2,11 +2,9 @@
 
 ## About 
 
-Eliot is a tool for poetry generation. It works by generating words from a
+Eliot is a library for poetry generation. It works by generating words from a
 language model, constrained by another model of the scansion and rhyme
 proper to a particular poetic form.
-
-Currently it generates Shakespearian sonnets and limericks only. 
 
 The language model is a bigram model from NLTK and the poetry model uses 
 regular expressions to match appropriate stress sequences.
@@ -44,8 +42,9 @@ William Blake:
 >
 > delights in hell in hell in senseless clay
 
-And here are two limericks generated from the works of G. K. Chesterton:
+And here are two limericks generated from the works of G. K. Chesterton.
 
+The first:
 > minority of a position
 >
 > examining it a commission
@@ -56,6 +55,7 @@ And here are two limericks generated from the works of G. K. Chesterton:
 >
 > agility hardly patrician
 
+The second:
 > explaining away a delusion
 >
 > hegemony quite in allusion
