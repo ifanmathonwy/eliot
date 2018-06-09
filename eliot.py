@@ -202,7 +202,7 @@ def get_rhyming_groups(group_size, number_groups, pool):
             clusters[key].append(sentence)
     groups = list(filter(lambda c: len(c) > group_size, clusters.values()))
     random.shuffle(groups)
-    return [random.sample(couplet, group_size) for couplet in couplets]
+    return [random.sample(group, group_size) for group in groups]
 
 
 def generate_candidate_pool(size, provider, validator):
@@ -233,11 +233,11 @@ class Sonnet(object):
         sentences = generate_candidate_pool(self.candidate_pool_size,
                                             self.provider,
                                             iambic_pentameter_validator)
-        couplets = get_rhyming_groups(2, 7, sentences)
+        group_dict = dict(zip(list('abcdefg'), get_rhyming_groups(2, 7, sentences)))
         poem = []
-        for a, b in zip((0, 1, 0, 1, 2, 3, 2, 3, 4, 5, 4, 5, 6, 6),
-                        (0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1)):
-            poem.append(couplets[a][b])
+        scheme = ['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g']
+        for letter in scheme:
+            poem.append(group_dict[letter].pop())
         return "\n".join(poem)
 
 
@@ -262,20 +262,19 @@ class Limerick(object):
                                           self.provider,
                                           anapaestic_dimeter_validator)
 
+        group_dict = {}
         # Rhyme scheme is AABBA. We need a triplet of A and a couplet of B.
         # First find the couplet of B.
-        couplet = get_rhyming_groups(2, 1, dimeter)[0]
+        group_dict['b'] = get_rhyming_groups(2, 1, dimeter)[0]
 
         # Now find the triplet of A.
-        triplet = get_rhyming_groups(3, 1, trimeter)[0]
+        group_dict['a'] = get_rhyming_groups(3, 1, trimeter)[0]
 
-        poem = [triplet[0],
-                triplet[1],
-                couplet[0],
-                couplet[1],
-                triplet[2]]
+        poem = []
+        scheme = ['a', 'a', 'b', 'b', 'a']
+        for letter in scheme:
+            poem.append(group_dict[letter].pop())
         return "\n".join(poem)
-
 
 def main():
     corpus = itertools.chain(gutenberg.words('blake-poems.txt'),
