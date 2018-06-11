@@ -5,14 +5,9 @@ model of the scansion and rhyme proper to a particular poetic form.
 
 The language model is a bigram model from NLTK and the poetry model uses
 regular expressions to match appropriate stress sequences.
-
-TODO: Add tests.
-TODO: Specify precise repetition, not just rhyme, in the rhyme scheme.
 """
 
 from collections import defaultdict
-import itertools
-import logging
 import random
 import re
 import time
@@ -20,6 +15,7 @@ import time
 from nltk import bigrams, ConditionalFreqDist
 from nltk.corpus import gutenberg
 import pronouncing
+
 
 class BigramWordCandidateProvider(object):
     """Provides candidate next words given a word using a bigram model."""
@@ -77,10 +73,22 @@ def get_meter_validator(meter_re):
 
     return validator
 
+
 class Validator(object):
+    """Object with full and partial methods for validating a line of meter."""
+
     def __init__(self, partial_validator, full_validator):
+        """Initializer for the Validator object.
+
+        Args:
+            partial_validator: A method which returns True iff its input is a
+                valid partial line of the given meter.
+            full_validator: A method which returns True iff its input is a
+                valid full line of the given meter.
+        """
         self.partial = partial_validator
         self.full = full_validator
+
 
 # Iambic pentameter is used in the sonnet.
 # An iamb is a metrical foot consisting of an unstressed (0 stress) syllable,
@@ -172,6 +180,18 @@ def generate_metered_sentence(candidate_provider,
 
 
 def generate_candidate_pool(size, provider, validator):
+    """Generates a pool of candidate lines from the given provider.
+
+    Args:
+        size (int): Number of candidate lines in the pool.
+        provider: An object which implements candidates(sequence) and
+            random_word() methods.
+        validator: An object which implements full and partial meter
+            validator methods.
+
+    Returns:
+        pool (set): A set of candidate lines fitting the given meter.
+    """
     pool = set()
     for _ in range(size):
         sentence = generate_metered_sentence(provider,
@@ -214,14 +234,22 @@ def get_rhyming_groups(group_size, number_groups, pool):
     random.shuffle(groups)
     return [random.sample(group, group_size) for group in groups]
 
+
 class PoemDesignError(Exception):
     """Raised when a poem design is ill-formed."""
     pass
+
 
 class Poem(object):
     """Encapsulates the logic for generating a poem."""
 
     def __init__(self, candidate_provider):
+        """Initializer of the Poem object.
+
+        Args:
+            candidate_provider: An object which implements
+            candidates(sequence) and random_word() methods.
+        """
         # TODO: Add way to specify line type and schemes at initialization.
         self.provider = candidate_provider
         self.validators = {}
@@ -232,10 +260,35 @@ class Poem(object):
         self.type_to_scheme = defaultdict(set)
 
     def register_line_type(self, name, validator, candidate_pool_size=600):
+        """Register a type of line that can be used in designing the poem.
+
+        Args:
+            name (string): The name of the line type.
+            validator: An object which implements full and partial validation
+                methods.
+            candidate_pool_size (int): The size of the candidate pool to be
+                used when generating lines of this type.
+
+        """
         self.validators[name] = validator
         self.pool_sizes[name] = candidate_pool_size
 
     def design(self, rhyme_scheme, type_scheme):
+        """Specify the meter of each line as well as the rhyme scheme.
+
+        Args:
+            rhyme_scheme (list): A list of the rhyme groups for each line
+                of the poem. If two lines have the same rhyme group, they
+                rhyme.
+            type_scheme (list): A list of the line types for each line of
+                the poem. These line types should be registered.
+
+        Raises:
+            PoemDesignError: When two lines are in the same rhyme group
+                but do not have the same line type.
+                TODO: Remove this restriction.
+
+        """
         self.rhyme_scheme = rhyme_scheme
         self.type_scheme = type_scheme
         assert len(self.rhyme_scheme) == len(self.type_scheme)
@@ -251,6 +304,11 @@ class Poem(object):
             self.type_to_scheme[(type, count)].add(rhyme)
 
     def generate(self):
+        """Generates the poem.
+
+        Returns:
+             A string containing the poem.
+        """
         if not self.candidate_pools:
             for type in self.validators:
                 self.candidate_pools[type] = generate_candidate_pool(self.pool_sizes[type],
@@ -271,14 +329,18 @@ class Poem(object):
             poem.append(group_dict[letter].pop())
         return "\n".join(poem)
 
+
 def generate_sonnet(provider):
+    """Generate a sonnet from the given provider."""
     sonnet = Poem(provider)
     sonnet.register_line_type("iambic pentameter", iambic_pentameter_validator)
     sonnet.design(['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g'],
                 ["iambic pentameter"] * 14)
     print(sonnet.generate())
 
+
 def generate_limerick(provider):
+    """Generate a limerick from the given provider."""
     limerick = Poem(provider)
     limerick.register_line_type("anapaestic dimeter",
                                 anapaestic_dimeter_validator,
@@ -294,10 +356,9 @@ def generate_limerick(provider):
                      'anapaestic trimeter'])
     print(limerick.generate())
 
+
 def main():
-    corpus = itertools.chain(gutenberg.words('blake-poems.txt'),
-                             gutenberg.words('austen-sense.txt'),
-                             gutenberg.words('whitman-leaves.txt'))
+    corpus = gutenberg.words('whitman-leaves.txt')
     provider = BigramWordCandidateProvider(corpus)
     generate_sonnet(provider)
     generate_limerick(provider)
