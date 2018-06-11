@@ -5,6 +5,10 @@ model of the scansion and rhyme proper to a particular poetic form.
 
 The language model is a bigram model from NLTK and the poetry model uses
 regular expressions to match appropriate stress sequences.
+
+TODO: tests.
+TODO: optional local caching/pickling of candidate pool.
+TODO: verbose mode logging generation process.
 """
 
 from collections import defaultdict
@@ -64,6 +68,7 @@ def stresses_for_word_sequence(word_sequence):
 
 def get_meter_validator(meter_re):
     """Returns a validator function for a regex matching a stress pattern."""
+
     def validator(word_sequence):
         stresses = stresses_for_word_sequence(word_sequence)
         if meter_re.match(stresses):
@@ -74,11 +79,11 @@ def get_meter_validator(meter_re):
     return validator
 
 
-class Validator(object):
+class Meter(object):
     """Object with full and partial methods for validating a line of meter."""
 
     def __init__(self, partial_validator, full_validator):
-        """Initializer for the Validator object.
+        """Initializer for the Meter object.
 
         Args:
             partial_validator: A method which returns True iff its input is a
@@ -98,10 +103,9 @@ class Validator(object):
 PARTIAL_IAMBIC_PENTAMETER_RE = re.compile(r'^0$|^(0[12]){1,5}0?$')
 FULL_IAMBIC_PENTAMETER_RE = re.compile(r'^(0[12]){5}0?$')
 
-is_partial_iambic_pentameter = get_meter_validator(PARTIAL_IAMBIC_PENTAMETER_RE)
-is_full_iambic_pentameter = get_meter_validator(FULL_IAMBIC_PENTAMETER_RE)
-iambic_pentameter_validator = Validator(is_partial_iambic_pentameter,
-                                        is_full_iambic_pentameter)
+_is_partial_iambic_pentameter = get_meter_validator(PARTIAL_IAMBIC_PENTAMETER_RE)
+_is_full_iambic_pentameter = get_meter_validator(FULL_IAMBIC_PENTAMETER_RE)
+IAMBIC_PENTAMETER = Meter(_is_partial_iambic_pentameter, _is_full_iambic_pentameter)
 
 # Anapaestic dimeter and trimeter are used in the limerick.
 PARTIAL_ANAPAESTIC_DIMETER_RE = re.compile(r'^00?$|^(00?[12])((00[12])0?)?$')
@@ -109,14 +113,14 @@ FULL_ANAPAESTIC_DIMETER_RE = re.compile(r'^(00?[12])(00[12])0?$')
 PARTIAL_ANAPAESTIC_TRIMETER_RE = re.compile(r'^00?$|^(00?[12])(00[12]){1,2}0?$')
 FULL_ANAPAESTIC_TRIMETER_RE = re.compile(r'^(00?[12])(00[12]){2}0?$')
 
-is_partial_anapaestic_dimeter = get_meter_validator(PARTIAL_ANAPAESTIC_DIMETER_RE)
-is_full_anapaestic_dimeter = get_meter_validator(FULL_ANAPAESTIC_DIMETER_RE)
-anapaestic_dimeter_validator = Validator(is_partial_anapaestic_dimeter,
-                                         is_full_anapaestic_dimeter)
-is_partial_anapaestic_trimeter = get_meter_validator(PARTIAL_ANAPAESTIC_TRIMETER_RE)
-is_full_anapaestic_trimeter = get_meter_validator(FULL_ANAPAESTIC_TRIMETER_RE)
-anapaestic_trimeter_validator = Validator(is_partial_anapaestic_trimeter,
-                                          is_full_anapaestic_trimeter)
+_is_partial_anapaestic_dimeter = get_meter_validator(PARTIAL_ANAPAESTIC_DIMETER_RE)
+_is_full_anapaestic_dimeter = get_meter_validator(FULL_ANAPAESTIC_DIMETER_RE)
+ANAPAESTIC_DIMETER = Meter(_is_partial_anapaestic_dimeter, _is_full_anapaestic_dimeter)
+
+_is_partial_anapaestic_trimeter = get_meter_validator(PARTIAL_ANAPAESTIC_TRIMETER_RE)
+_is_full_anapaestic_trimeter = get_meter_validator(FULL_ANAPAESTIC_TRIMETER_RE)
+ANAPAESTIC_TRIMETER = Meter(_is_partial_anapaestic_trimeter, _is_full_anapaestic_trimeter)
+
 
 class GenerationTimeout(Exception):
     """Raised when generating a line of poetry takes too long."""
@@ -127,7 +131,7 @@ def generate_metered_sentence(candidate_provider,
                               partial_validator,
                               full_validator,
                               start_word=None,
-                              timeout_seconds=10):
+                              timeout_seconds=20):
     """Generates a random metered sentence.
 
     Args:
@@ -179,14 +183,14 @@ def generate_metered_sentence(candidate_provider,
     return word_sequence
 
 
-def generate_candidate_pool(size, provider, validator):
+def generate_candidate_pool(size, provider, meter):
     """Generates a pool of candidate lines from the given provider.
 
     Args:
         size (int): Number of candidate lines in the pool.
         provider: An object which implements candidates(sequence) and
             random_word() methods.
-        validator: An object which implements full and partial meter
+        meter: An object which implements full and partial meter
             validator methods.
 
     Returns:
@@ -195,8 +199,8 @@ def generate_candidate_pool(size, provider, validator):
     pool = set()
     for _ in range(size):
         sentence = generate_metered_sentence(provider,
-                                             validator.partial,
-                                             validator.full)
+                                             meter.partial,
+                                             meter.full)
         pool.add(' '.join(sentence))
     return pool
 
@@ -227,9 +231,8 @@ def get_rhyming_groups(group_size, number_groups, pool):
         last_word = sentence.split(" ")[-1]
         last_word_phones = pronouncing.phones_for_word(last_word)[0]
         rhyming_part = pronouncing.rhyming_part(last_word_phones)
-        key = rhyming_part
-        if last_word not in [s.split(" ")[-1] for s in clusters[key]]:
-            clusters[key].append(sentence)
+        if last_word not in [s.split(" ")[-1] for s in clusters[rhyming_part]]:
+            clusters[rhyming_part].append(sentence)
     groups = list(filter(lambda c: len(c) >= group_size, clusters.values()))
     random.shuffle(groups)
     return [random.sample(group, group_size) for group in groups]
@@ -248,30 +251,30 @@ class Poem(object):
 
         Args:
             candidate_provider: An object which implements
-            candidates(sequence) and random_word() methods.
+                candidates(sequence) and random_word() methods.
         """
         # TODO: Add way to specify line type and schemes at initialization.
-        self.provider = candidate_provider
-        self.validators = {}
-        self.pool_sizes = {}
-        self.scheme_to_type = defaultdict(lambda: None)
-        self.scheme_counter = defaultdict(int)
-        self.candidate_pools = {}
-        self.type_to_scheme = defaultdict(set)
+        self._provider = candidate_provider
+        self._meters = {}
+        self._pool_sizes = {}
+        self._scheme_to_type = defaultdict(lambda: None)
+        self._scheme_counter = defaultdict(int)
+        self._candidate_pools = {}
+        self._type_to_scheme = defaultdict(set)
 
-    def register_line_type(self, name, validator, candidate_pool_size=600):
+    def register_line_type(self, name, meter, candidate_pool_size=600):
         """Register a type of line that can be used in designing the poem.
 
         Args:
             name (string): The name of the line type.
-            validator: An object which implements full and partial validation
+            meter: An object which implements full and partial validation
                 methods.
             candidate_pool_size (int): The size of the candidate pool to be
                 used when generating lines of this type.
 
         """
-        self.validators[name] = validator
-        self.pool_sizes[name] = candidate_pool_size
+        self._meters[name] = meter
+        self._pool_sizes[name] = candidate_pool_size
 
     def design(self, rhyme_scheme, type_scheme):
         """Specify the meter of each line as well as the rhyme scheme.
@@ -286,67 +289,66 @@ class Poem(object):
         Raises:
             PoemDesignError: When two lines are in the same rhyme group
                 but do not have the same line type.
-                TODO: Remove this restriction.
-
         """
-        self.rhyme_scheme = rhyme_scheme
-        self.type_scheme = type_scheme
-        assert len(self.rhyme_scheme) == len(self.type_scheme)
-        for rhyme, type in zip(self.rhyme_scheme, self.type_scheme):
-            if self.scheme_to_type[rhyme] and self.scheme_to_type[rhyme] != type:
+        self._rhyme_scheme = rhyme_scheme
+        self._type_scheme = type_scheme
+        assert len(self._rhyme_scheme) == len(self._type_scheme)
+        for rhyme, type in zip(self._rhyme_scheme, self._type_scheme):
+            if self._scheme_to_type[rhyme] and self._scheme_to_type[rhyme] != type:
                 raise PoemDesignError('Poem design is ill-formed.')
             else:
-                self.scheme_to_type[rhyme] = type
-                self.scheme_counter[rhyme] += 1
+                self._scheme_to_type[rhyme] = type
+                self._scheme_counter[rhyme] += 1
         # For each scheme, find out its type and its count.
-        for rhyme, count in self.scheme_counter.items():
-            type = self.scheme_to_type[rhyme]
-            self.type_to_scheme[(type, count)].add(rhyme)
+        for rhyme, count in self._scheme_counter.items():
+            type = self._scheme_to_type[rhyme]
+            self._type_to_scheme[(type, count)].add(rhyme)
 
     def generate(self):
         """Generates the poem.
 
         Returns:
-             A string containing the poem.
+             A a list of the lines of the poem.
         """
-        if not self.candidate_pools:
-            for type in self.validators:
-                self.candidate_pools[type] = generate_candidate_pool(self.pool_sizes[type],
-                                                                     self.provider,
-                                                                     self.validators[type])
+        if not self._candidate_pools:
+            for type in self._meters:
+                self._candidate_pools[type] = generate_candidate_pool(self._pool_sizes[type],
+                                                                      self._provider,
+                                                                      self._meters[type])
         group_dict = {}
         # Work backwards from what is needed at the end of the function to deobfuscate
         # the function.
-        for (type, count), rhymes in self.type_to_scheme.items():
+        for (type, count), rhymes in self._type_to_scheme.items():
             rhyming_groups = get_rhyming_groups(count,
                                                 len(rhymes),
-                                                self.candidate_pools[type])
+                                                self._candidate_pools[type])
             for rhyme in rhymes:
                 group_dict[rhyme] = rhyming_groups.pop()
 
         poem = []
-        for letter in self.rhyme_scheme:
+        for letter in self._rhyme_scheme:
             poem.append(group_dict[letter].pop())
-        return "\n".join(poem)
+        return poem
 
 
 def generate_sonnet(provider):
-    """Generate a sonnet from the given provider."""
+    """Print a sonnet from the given provider."""
     sonnet = Poem(provider)
-    sonnet.register_line_type('iambic pentameter', iambic_pentameter_validator)
+    sonnet.register_line_type('iambic pentameter', IAMBIC_PENTAMETER)
     sonnet.design(['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g'],
-                ['iambic pentameter'] * 14)
-    print(sonnet.generate())
+                  ['iambic pentameter'] * 14)
+    generated_sonnet = sonnet.generate()
+    print('\n'.join(generated_sonnet))
 
 
 def generate_limerick(provider):
-    """Generate a limerick from the given provider."""
+    """Print a limerick from the given provider."""
     limerick = Poem(provider)
     limerick.register_line_type('anapaestic dimeter',
-                                anapaestic_dimeter_validator,
+                                ANAPAESTIC_DIMETER,
                                 candidate_pool_size=200)
     limerick.register_line_type('anapaestic trimeter',
-                                anapaestic_trimeter_validator,
+                                ANAPAESTIC_TRIMETER,
                                 candidate_pool_size=250)
     limerick.design(['a', 'a', 'b', 'b', 'a'],
                     ['anapaestic trimeter',
@@ -354,7 +356,8 @@ def generate_limerick(provider):
                      'anapaestic dimeter',
                      'anapaestic dimeter',
                      'anapaestic trimeter'])
-    print(limerick.generate())
+    generated_limerick = limerick.generate()
+    print('\n'.join(generated_limerick))
 
 
 def main():
