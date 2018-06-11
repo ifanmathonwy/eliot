@@ -294,7 +294,7 @@ class Poem(object):
         assert len(self.rhyme_scheme) == len(self.type_scheme)
         for rhyme, type in zip(self.rhyme_scheme, self.type_scheme):
             if self.scheme_to_type[rhyme] and self.scheme_to_type[rhyme] != type:
-                raise PoemDesignError("Poem design is ill-formed.")
+                raise PoemDesignError('Poem design is ill-formed.')
             else:
                 self.scheme_to_type[rhyme] = type
                 self.scheme_counter[rhyme] += 1
@@ -333,19 +333,19 @@ class Poem(object):
 def generate_sonnet(provider):
     """Generate a sonnet from the given provider."""
     sonnet = Poem(provider)
-    sonnet.register_line_type("iambic pentameter", iambic_pentameter_validator)
+    sonnet.register_line_type('iambic pentameter', iambic_pentameter_validator)
     sonnet.design(['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g'],
-                ["iambic pentameter"] * 14)
+                ['iambic pentameter'] * 14)
     print(sonnet.generate())
 
 
 def generate_limerick(provider):
     """Generate a limerick from the given provider."""
     limerick = Poem(provider)
-    limerick.register_line_type("anapaestic dimeter",
+    limerick.register_line_type('anapaestic dimeter',
                                 anapaestic_dimeter_validator,
                                 candidate_pool_size=200)
-    limerick.register_line_type("anapaestic trimeter",
+    limerick.register_line_type('anapaestic trimeter',
                                 anapaestic_trimeter_validator,
                                 candidate_pool_size=250)
     limerick.design(['a', 'a', 'b', 'b', 'a'],
@@ -364,5 +364,5 @@ def main():
     generate_limerick(provider)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
