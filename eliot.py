@@ -100,25 +100,25 @@ class Meter(object):
 # followed by a stressed syllable (1 or 2 stress). Iambic pentameter is a
 # sequence of five iambs, with the last iamb optionally having an extra
 # unstressed syllable at the end.
-PARTIAL_IAMBIC_PENTAMETER_RE = re.compile(r'^0$|^(0[12]){1,5}0?$')
-FULL_IAMBIC_PENTAMETER_RE = re.compile(r'^(0[12]){5}0?$')
-
-_is_partial_iambic_pentameter = get_meter_validator(PARTIAL_IAMBIC_PENTAMETER_RE)
-_is_full_iambic_pentameter = get_meter_validator(FULL_IAMBIC_PENTAMETER_RE)
+# TODO: Add most of this to the implementation of Meter().
+_partial_iambic_pentameter_re = re.compile(r'^0$|^(0[12]){1,5}0?$')
+_full_iambic_pentameter_re = re.compile(r'^(0[12]){5}0?$')
+_is_partial_iambic_pentameter = get_meter_validator(_partial_iambic_pentameter_re)
+_is_full_iambic_pentameter = get_meter_validator(_full_iambic_pentameter_re)
 IAMBIC_PENTAMETER = Meter(_is_partial_iambic_pentameter, _is_full_iambic_pentameter)
 
 # Anapaestic dimeter and trimeter are used in the limerick.
-PARTIAL_ANAPAESTIC_DIMETER_RE = re.compile(r'^00?$|^(00?[12])((00[12])0?)?$')
-FULL_ANAPAESTIC_DIMETER_RE = re.compile(r'^(00?[12])(00[12])0?$')
-PARTIAL_ANAPAESTIC_TRIMETER_RE = re.compile(r'^00?$|^(00?[12])(00[12]){1,2}0?$')
-FULL_ANAPAESTIC_TRIMETER_RE = re.compile(r'^(00?[12])(00[12]){2}0?$')
+_partial_anapaestic_dimeter_re = re.compile(r'^00?$|^(00?[12])((00[12])0?)?$')
+_full_anapaestic_dimeter_re = re.compile(r'^(00?[12])(00[12])0?$')
+_partial_anapaestic_trimeter_re = re.compile(r'^00?$|^(00?[12])(00[12]){1,2}0?$')
+_full_anapaestic_trimeter_re = re.compile(r'^(00?[12])(00[12]){2}0?$')
 
-_is_partial_anapaestic_dimeter = get_meter_validator(PARTIAL_ANAPAESTIC_DIMETER_RE)
-_is_full_anapaestic_dimeter = get_meter_validator(FULL_ANAPAESTIC_DIMETER_RE)
+_is_partial_anapaestic_dimeter = get_meter_validator(_partial_anapaestic_dimeter_re)
+_is_full_anapaestic_dimeter = get_meter_validator(_full_anapaestic_dimeter_re)
 ANAPAESTIC_DIMETER = Meter(_is_partial_anapaestic_dimeter, _is_full_anapaestic_dimeter)
 
-_is_partial_anapaestic_trimeter = get_meter_validator(PARTIAL_ANAPAESTIC_TRIMETER_RE)
-_is_full_anapaestic_trimeter = get_meter_validator(FULL_ANAPAESTIC_TRIMETER_RE)
+_is_partial_anapaestic_trimeter = get_meter_validator(_partial_anapaestic_trimeter_re)
+_is_full_anapaestic_trimeter = get_meter_validator(_full_anapaestic_trimeter_re)
 ANAPAESTIC_TRIMETER = Meter(_is_partial_anapaestic_trimeter, _is_full_anapaestic_trimeter)
 
 
