@@ -338,7 +338,7 @@ def generate_sonnet(provider):
     sonnet.design(['a', 'b', 'a', 'b', 'c', 'd', 'c', 'd', 'e', 'f', 'e', 'f', 'g', 'g'],
                   ['iambic pentameter'] * 14)
     generated_sonnet = sonnet.generate()
-    print('\n'.join(generated_sonnet))
+    return '\n'.join(generated_sonnet)
 
 
 def generate_limerick(provider):
@@ -357,14 +357,14 @@ def generate_limerick(provider):
                      'anapaestic dimeter',
                      'anapaestic trimeter'])
     generated_limerick = limerick.generate()
-    print('\n'.join(generated_limerick))
+    return '\n'.join(generated_limerick)
 
 
 def main():
     corpus = gutenberg.words('whitman-leaves.txt')
     provider = BigramWordCandidateProvider(corpus)
-    generate_sonnet(provider)
-    generate_limerick(provider)
+    print(generate_sonnet(provider))
+    print(generate_limerick(provider))
 
 
 if __name__ == '__main__':
